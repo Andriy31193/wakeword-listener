@@ -1,0 +1,35 @@
+# Wake Word Listener Configuration
+
+wake_word:
+  model_path: "hey_dex.ppn"  # Path to wake word model file
+  access_key: ""  # Picovoice access key
+  sensitivity: 0.5
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  frame_length: 512
+
+recording:
+  silence_timeout_secs: 2.0      # Stop recording after silence detected
+  max_length_secs: 30.0          # Maximum recording duration
+  vad_energy_threshold: 300      # VAD energy threshold for silence detection
+
+mcp_client:
+  enabled: true                  # Enable MCP client for context retrieval
+  host: "127.0.0.1"
+  port: 5001
+  endpoint_retrieve_context: "/context"
+
+stt:
+  endpoint: ""                    # STT server endpoint (empty = use local CUDA transcription)
+  timeout: 30                     # Request timeout in seconds
+  model: "base"                 # Whisper model size (tiny, base, small, medium, large) for local transcription
+  device: "cpu"                  # Device for local transcription (cuda or cpu)
+
+n8n:
+  webhook_url: ""  # n8n webhook URL
+
+logging:
+  level: "INFO"
+

@@ -1,0 +1,14 @@
+# Audio processing
+pyaudio==0.2.14
+pvporcupine>=4.0.0
+
+# MCP client
+requests==2.31.0
+
+# STT (Speech-to-Text)
+openai-whisper==20231117  # For local CUDA transcription
+numpy>=1.24.0  # Required by Whisper
+
+# Configuration
+pyyaml==6.0.1
+
