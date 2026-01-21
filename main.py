@@ -8,7 +8,7 @@ from speech_recorder import SpeechRecorder
 from mcp_client import MCPClient
 from n8n_client import N8NClient
 from stt_client import STTClient
-from sound_player import play_sound_async
+from sound_player import play_sound, play_sound_async
 from audio_api import run_api_server
 
 # Setup logging
@@ -111,10 +111,6 @@ class WakeWordListener:
         """Callback when wake word is detected."""
         logger.info(f"Wake word detected! Keyword index: {keyword_index}")
         
-        # Play wake word start sound if configured
-        if self.on_wakewordstart_sound_path:
-            play_sound_async(self.on_wakewordstart_sound_path)
-        
         # Check if already processing - set interrupt flag
         with self._processing_lock:
             if self.is_processing:
@@ -129,17 +125,29 @@ class WakeWordListener:
             self.interrupt_flag.clear()
         
         # Process wake word in background thread (non-blocking)
+        # This will play the start sound and wait for it before recording
         threading.Thread(target=self._handle_wake_word, daemon=True).start()
     
     def _handle_wake_word(self):
         """Handle wake word detection: record speech and send to n8n."""
         try:
-            # Check for interrupt before recording
+            # Check for interrupt before playing start sound
             if self.interrupt_flag.is_set():
-                logger.info("Wake word handler interrupted before recording")
+                logger.info("Wake word handler interrupted before start sound")
                 return
             
-            # Record speech
+            # Play wake word start sound if configured (blocking - wait for it to finish)
+            if self.on_wakewordstart_sound_path:
+                logger.info("Playing wake word start sound...")
+                play_sound(self.on_wakewordstart_sound_path)
+                logger.info("Wake word start sound finished")
+            
+            # Check for interrupt after start sound
+            if self.interrupt_flag.is_set():
+                logger.info("Wake word handler interrupted after start sound")
+                return
+            
+            # Record speech (only starts after start sound is played)
             logger.info("Recording user speech...")
             audio_bytes = self.speech_recorder.start_recording()
             
@@ -152,8 +160,9 @@ class WakeWordListener:
                 logger.warning("No audio recorded")
                 return
             
-            # Play wake word end sound if configured (silence detected, transcription starting)
+            # Play wake word end sound if configured (after recording stopped)
             if self.on_wakewordend_sound_path:
+                logger.info("Playing wake word end sound...")
                 play_sound_async(self.on_wakewordend_sound_path)
             
             # Process recorded audio
