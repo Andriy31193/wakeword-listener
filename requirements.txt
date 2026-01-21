@@ -8,6 +8,10 @@ requests==2.31.0
 # STT (Speech-to-Text)
 openai-whisper==20231117  # For local CUDA transcription
 numpy>=1.24.0  # Required by Whisper
+groq>=0.4.0  # For Groq transcription
+
+# Web API
+flask>=2.3.0  # For audio playback API
 
 # Configuration
 pyyaml==6.0.1

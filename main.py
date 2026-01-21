@@ -8,6 +8,8 @@ from speech_recorder import SpeechRecorder
 from mcp_client import MCPClient
 from n8n_client import N8NClient
 from stt_client import STTClient
+from sound_player import play_sound_async
+from audio_api import run_api_server
 
 # Setup logging
 logging.basicConfig(
@@ -76,12 +78,19 @@ class WakeWordListener:
         # Initialize STT client
         stt_config = config.get("stt", {})
         self.stt_client = STTClient(
+            transcription_type=stt_config.get("type", "local"),
             endpoint=stt_config.get("endpoint", ""),
             sample_rate=audio_config["sample_rate"],
             timeout=stt_config.get("timeout", 30),
             model=stt_config.get("model", "medium"),
-            device=stt_config.get("device", "cuda")
+            device=stt_config.get("device", "cuda"),
+            groq_api_key=stt_config.get("groq_api_key", "")
         )
+        
+        # Load sound paths
+        sounds_config = config.get("sounds", {})
+        self.on_wakewordstart_sound_path = sounds_config.get("on_wakewordstart_sound_path", "")
+        self.on_wakewordend_sound_path = sounds_config.get("on_wakewordend_sound_path", "")
         
         # Initialize n8n client
         n8n_config = config.get("n8n", {})
@@ -101,6 +110,10 @@ class WakeWordListener:
     def _on_wake_word(self, keyword_index: int):
         """Callback when wake word is detected."""
         logger.info(f"Wake word detected! Keyword index: {keyword_index}")
+        
+        # Play wake word start sound if configured
+        if self.on_wakewordstart_sound_path:
+            play_sound_async(self.on_wakewordstart_sound_path)
         
         # Check if already processing - set interrupt flag
         with self._processing_lock:
@@ -138,6 +151,10 @@ class WakeWordListener:
             if not audio_bytes or len(audio_bytes) == 0:
                 logger.warning("No audio recorded")
                 return
+            
+            # Play wake word end sound if configured (silence detected, transcription starting)
+            if self.on_wakewordend_sound_path:
+                play_sound_async(self.on_wakewordend_sound_path)
             
             # Process recorded audio
             self._process_recorded_audio(audio_bytes)
@@ -291,6 +308,19 @@ def main():
     
     logger.info("Starting Wake Word Listener...")
     logger.info(f"Configuration: {config}")
+    
+    # Start audio playback API server in background thread
+    api_config = config.get("audio_api", {})
+    if api_config.get("enabled", True):  # Enabled by default
+        api_host = api_config.get("host", "127.0.0.1")
+        api_port = api_config.get("port", 5002)
+        api_thread = threading.Thread(
+            target=run_api_server,
+            args=(api_host, api_port, False),
+            daemon=True
+        )
+        api_thread.start()
+        logger.info(f"Audio playback API server started on {api_host}:{api_port}")
     
     # Create and start listener
     listener = WakeWordListener(config)

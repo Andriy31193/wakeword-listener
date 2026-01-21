@@ -22,13 +22,24 @@ mcp_client:
   endpoint_retrieve_context: "/context"
 
 stt:
-  endpoint: ""                    # STT server endpoint (empty = use local CUDA transcription)
+  type: "local"                  # Transcription type: "local", "remote", or "groq"
+  endpoint: ""                    # STT server endpoint (required if type is "remote")
   timeout: 30                     # Request timeout in seconds
   model: "base"                 # Whisper model size (tiny, base, small, medium, large) for local transcription
   device: "cpu"                  # Device for local transcription (cuda or cpu)
+  groq_api_key: ""               # Groq API key (required if type is "groq")
 
 n8n:
   webhook_url: ""  # n8n webhook URL
+
+sounds:
+  on_wakewordstart_sound_path: ""  # Path to sound file played when wake word is triggered (empty = no sound)
+  on_wakewordend_sound_path: ""    # Path to sound file played when silence detected and transcription started (empty = no sound)
+
+audio_api:
+  enabled: true                    # Enable audio playback API server
+  host: "127.0.0.1"               # API server host
+  port: 5002                       # API server port
 
 logging:
   level: "INFO"

@@ -28,10 +28,21 @@ DEFAULT_CONFIG = {
         "endpoint_retrieve_context": "/context"
     },
     "stt": {
+        "type": "local",
         "endpoint": "",
         "timeout": 30,
         "model": "medium",
-        "device": "cuda"
+        "device": "cuda",
+        "groq_api_key": ""
+    },
+    "sounds": {
+        "on_wakewordstart_sound_path": "",
+        "on_wakewordend_sound_path": ""
+    },
+    "audio_api": {
+        "enabled": True,
+        "host": "127.0.0.1",
+        "port": 5002
     },
     "n8n": {
         "webhook_url": ""

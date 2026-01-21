@@ -1,4 +1,4 @@
-"""Speech-to-Text client for transcription (remote endpoint or local CUDA)."""
+"""Speech-to-Text client for transcription (remote endpoint, local CUDA, or Groq)."""
 import logging
 import requests
 import base64
@@ -14,31 +14,37 @@ class STTClient:
     
     def __init__(
         self,
+        transcription_type: str = "local",
         endpoint: str = "",
         sample_rate: int = 16000,
         timeout: int = 30,
         model: str = "medium",
-        device: str = "cuda"
+        device: str = "cuda",
+        groq_api_key: str = ""
     ):
         """
         Initialize STT client.
         
         Args:
-            endpoint: STT server endpoint URL. If empty, uses local Whisper with CUDA.
+            transcription_type: Type of transcription ("local", "remote", or "groq")
+            endpoint: STT server endpoint URL (required if type is "remote")
             sample_rate: Audio sample rate
             timeout: Request timeout for remote endpoint
             model: Whisper model size for local transcription (tiny, base, small, medium, large)
             device: Device for local transcription (cuda or cpu)
+            groq_api_key: Groq API key (required if type is "groq")
         """
+        self.transcription_type = transcription_type.lower()
         self.endpoint = endpoint
         self.sample_rate = sample_rate
         self.timeout = timeout
         self.model = model
         self.device = device
+        self.groq_api_key = groq_api_key
         
-        # Initialize local Whisper if no endpoint
+        # Initialize local Whisper if type is "local"
         self.whisper_model = None
-        if not self.endpoint:
+        if self.transcription_type == "local":
             try:
                 import whisper
                 logger.info(f"Loading Whisper model '{model}' for local transcription (device: {device})...")
@@ -50,9 +56,27 @@ class STTClient:
             except Exception as e:
                 logger.error(f"Failed to load Whisper model: {e}")
                 raise
+        elif self.transcription_type == "groq":
+            if not self.groq_api_key:
+                raise ValueError("Groq API key is required when transcription_type is 'groq'")
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=self.groq_api_key)
+                logger.info("Groq client initialized successfully")
+            except ImportError:
+                logger.error("Groq SDK not installed. Install with: pip install groq")
+                raise
+            except Exception as e:
+                logger.error(f"Failed to initialize Groq client: {e}")
+                raise
+        elif self.transcription_type == "remote":
+            if not self.endpoint:
+                raise ValueError("Endpoint is required when transcription_type is 'remote'")
         
-        if self.endpoint:
+        if self.transcription_type == "remote":
             logger.info(f"STT client initialized with remote endpoint: {endpoint}")
+        elif self.transcription_type == "groq":
+            logger.info("STT client initialized for Groq transcription")
         else:
             logger.info(f"STT client initialized for local transcription (model: {model}, device: {device})")
     
@@ -133,6 +157,52 @@ class STTClient:
             logger.error(f"Error in remote transcription: {e}")
             return None
     
+    def _transcribe_groq(self, audio_bytes: bytes) -> Optional[str]:
+        """
+        Transcribe audio using Groq API.
+        
+        Args:
+            audio_bytes: Raw PCM audio bytes
+            
+        Returns:
+            Transcribed text, or None on error
+        """
+        if not hasattr(self, 'groq_client'):
+            logger.error("Groq client not initialized")
+            return None
+        
+        try:
+            # Convert to WAV
+            wav_bytes = self._audio_bytes_to_wav(audio_bytes)
+            
+            # Create a file-like object for Groq API
+            audio_file = io.BytesIO(wav_bytes)
+            audio_file.seek(0)  # Ensure we're at the start
+            audio_file.name = "audio.wav"
+            
+            logger.info("Transcribing audio with Groq...")
+            
+            # Use Groq's Whisper API (OpenAI-compatible)
+            # The file parameter should be a tuple: (filename, file_object, content_type)
+            transcription = self.groq_client.audio.transcriptions.create(
+                file=(audio_file.name, audio_file, "audio/wav"),
+                model="whisper-large-v3-turbo",
+                response_format="text"
+            )
+            
+            if transcription:
+                # Groq returns the text directly when response_format is "text"
+                text = transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+                logger.info(f"Groq transcription completed: {text[:100]}...")
+                return text
+            else:
+                logger.warning("Groq returned empty transcription")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in Groq transcription: {e}", exc_info=True)
+            return None
+    
     def _transcribe_local(self, audio_bytes: bytes) -> Optional[str]:
         """
         Transcribe audio using local Whisper with CUDA.
@@ -199,7 +269,7 @@ class STTClient:
         """
         Transcribe audio bytes to text.
         
-        Uses remote endpoint if configured, otherwise uses local Whisper with CUDA.
+        Uses the configured transcription type (local, remote, or groq).
         
         Args:
             audio_bytes: Raw PCM audio bytes (16-bit)
@@ -211,8 +281,10 @@ class STTClient:
             logger.warning("Empty audio bytes provided")
             return None
         
-        if self.endpoint:
+        if self.transcription_type == "remote":
             return self._transcribe_remote(audio_bytes)
-        else:
+        elif self.transcription_type == "groq":
+            return self._transcribe_groq(audio_bytes)
+        else:  # local
             return self._transcribe_local(audio_bytes)
 
